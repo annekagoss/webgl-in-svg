@@ -1,9 +1,9 @@
 # webgl-in-svg
-Render shaders inside SVGs
+Render interactive shaders inside SVGs.
 
-![](./hello-world.svg)
-<img src="./hello-world.svg">
-
+## Use
+1. Edit the `uniform`, `vertex`, and `fragment` tags.
+2. Open the SVG in a browser.
 
 ## Uniforms
 `uResolution` and `uTime` are included by default.
