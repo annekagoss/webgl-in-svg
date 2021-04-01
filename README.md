@@ -1,5 +1,6 @@
 # webgl-in-svg
 Render interactive shaders inside SVGs.
+WebGL is initialized within the raw SVG code.
 
 ## Use
 1. Edit the `uniform`, `vertex`, and `fragment` tags.
