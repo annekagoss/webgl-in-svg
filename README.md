@@ -3,7 +3,7 @@ Render interactive shaders inside SVGs.
 WebGL is initialized within the raw SVG code.
 
 ## Use
-1. Edit the `uniform`, `vertex`, and `fragment` tags.
+1. Edit the `uniform`, `vertex`, and `fragment` tags in the raw SVG.
 2. Open the SVG in a browser.
 
 ## Uniforms
