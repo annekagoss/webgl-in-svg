@@ -1,0 +1,244 @@
+<svg xmlns="http://www.w3.org/2000/svg" height="800" width="800" version="1.1">
+        <foreignObject x="0" y="0" width="100%" height="100%">
+                <canvas id="canvas" width="1600" height="1600" style="width: 800px; height: 800px;" xmlns="http://www.w3.org/1999/xhtml"></canvas>
+                <uniform name="uMouse" type="VEC_2" x="0.5" y="0.5"/>
+                <uniform name="uColor" type="VEC_4" x="0" y="0" z="0" w="0"/>
+                <vertex>
+                        precision mediump float;
+
+                        attribute vec3 aBaseVertexPosition;
+                        void main() {
+                                gl_Position = vec4(aBaseVertexPosition, 1.0);
+                        }
+                </vertex>
+                <fragment>
+                        #ifdef GL_ES
+                        precision mediump float;
+                        #endif
+
+                        uniform vec2 uResolution;
+                        uniform float uTime;
+                        
+                        uniform vec2 uMouse;
+                        uniform vec4 uColor;
+
+                        float circle(vec2 st, vec2 center, float radius) {
+                                return step(distance(st, center), radius);
+                        }
+
+                        void main() {
+                                vec2 st = gl_FragCoord.xy / uResolution;
+                                float circle = circle(st, uMouse, 0.25);
+                                vec4 background = vec4(st, 0.5, 1.0);
+                                vec4 foreground = uColor;
+                                gl_FragColor = mix(background, foreground, circle);
+                        }
+                </fragment>
+        </foreignObject>
+        <script type="text/javascript">
+        !(function(e){
+                const SIZE = {x: 0, y: 0};
+                const BASE_TRIANGLE_MESH = [-1, 1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0];
+                const DEFAULT_UNIFORMS = {
+                        uResolution: {type: 'VEC_2', value: SIZE},
+                        uTime: {type: 'FLOAT_1', value: 0}
+                };
+
+                let uniforms;
+        
+                const loadShader = (gl, type, source) => {
+                        const shader = gl.createShader(type);
+                        gl.shaderSource(shader, source);
+                        gl.compileShader(shader);
+                        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                                const errorMessage = 'An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader);
+                                console.warn('An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader)); /* tslint:disable-line no-console */
+                                gl.deleteShader(shader);
+                                throw new Error(errorMessage);
+                                return;
+                        }
+                        return shader;
+                };
+
+                const initShaderProgram = (gl, vertexSource, fragmentSource) => {
+                        const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vertexSource);
+                        const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+                        const program = gl.createProgram();
+                        gl.attachShader(program, vertexShader);
+                        gl.attachShader(program, fragmentShader);
+                        gl.linkProgram(program);
+
+                        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                                console.warn('Unabled to initialize the shader program: ' + gl.getProgramInfoLog(program)); /* tslint:disable-line no-console */
+                        }
+                        return { program, loadedShaders: { fragmentShader, vertexShader } };
+                }
+
+                const mapUniformSettingsToLocations = (settings, gl, program, useFrameBuffer) => {
+                        return Object.keys(settings).reduce((result, key) => {
+                                result[key] = gl.getUniformLocation(program, key);
+                                return result;
+                        }, {});
+                };
+
+                const createUniformLocations = (gl, program, uniforms) => ({
+                        ...mapUniformSettingsToLocations(uniforms, gl, program),
+                        uProjectionMatrix: gl.getUniformLocation(program, 'uProjectionMatrix'),
+                        uModelViewMatrix: gl.getUniformLocation(program, 'uModelViewMatrix'),
+                        uNormalMatrix: gl.getUniformLocation(program, 'uNormalMatrix'),
+                });
+
+                const addHandlers = (canvas) => {
+                        canvas.addEventListener('mousemove', (e) => {
+                                uniforms.uMouse.value = {
+                                        x: e.x / (SIZE.x / 2),
+                                        y: 1.0 - (e.y / (SIZE.y / 2))
+                                }
+                        })
+                }
+
+                const initializeRenderer = () => {
+                        const canvas = document.getElementById('canvas');
+                        SIZE.x = canvas.width;
+                        SIZE.y = canvas.height;
+                        uniforms.uResolution.value = SIZE;
+
+                        const gl = canvas.getContext('webgl');
+
+                        gl.clearColor(0, 0, 0, 0);
+                        gl.clearDepth(1);
+                        gl.enable(gl.DEPTH_TEST);
+                        gl.depthFunc(gl.LEQUAL);
+                        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+                        gl.viewport(0, 0, SIZE.x, SIZE.y);
+                        gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+
+                        const fragment = document.getElementsByTagName('fragment')[0].textContent;
+                        const vertex = document.getElementsByTagName('vertex')[0].textContent;
+
+                        const { program, loadedShaders } = initShaderProgram(gl, vertex, fragment);
+                        gl.useProgram(program);
+                        uniformLocations = createUniformLocations(gl, program, uniforms);
+                        
+                        addHandlers(canvas);
+                        return { gl, program };
+                }
+
+                const buildBuffer = ({
+                        gl,
+                        type,
+                        data,
+                        itemSize,
+                }) => {
+                        const buffer = gl.createBuffer();
+                        const ArrayView =
+                                type === gl.ARRAY_BUFFER ? Float32Array : Uint16Array;
+                        gl.bindBuffer(type, buffer);
+                        gl.bufferData(type, new ArrayView(data), gl.STATIC_DRAW);
+                        const numItems = data.length / itemSize;
+                        return {
+                                buffer,
+                                data,
+                                itemSize,
+                                numItems,
+                        };
+                };
+
+                const initializeMesh = (gl, program) => {
+                        const buffer = buildBuffer({
+                                gl,
+                                type: gl.ARRAY_BUFFER,
+                                data: BASE_TRIANGLE_MESH,
+                                itemSize: 3,
+                        });
+                        const vertexPosition = gl.getAttribLocation(program, 'aBaseVertexPosition');
+                        gl.enableVertexAttribArray(vertexPosition);
+                        gl.vertexAttribPointer(vertexPosition, 3, gl.FLOAT, false, 0, 0);
+                        return buffer;
+                }
+
+                const initializeGL = () => {
+                        const { gl, program } = initializeRenderer();
+                        initializeMesh(gl, program);
+                        return {gl, program};
+                }
+
+                const parseUniform = (el) => {
+                        const type = el.getAttribute('type');
+                        let x, y, z, w = 0;
+                        
+                        switch(type) {
+                                case 'FLOAT_1':
+                                case 'INT_1':
+                                        const value = el.getAttribute('value');
+                                        return { type, value: Number(value) };
+                                case 'VEC_2':
+                                        x = el.getAttribute('x');
+                                        y = el.getAttribute('y');
+                                        return { type, value: {x, y} };
+                                case 'VEC_3':
+                                        x = el.getAttribute('x');
+                                        y = el.getAttribute('y');
+                                        z = el.getAttribute('z');
+                                        return { type, value: {x, y, z} };
+                                case 'VEC_4':
+                                        x = el.getAttribute('x');
+                                        y = el.getAttribute('y');
+                                        z = el.getAttribute('z');
+                                        w = el.getAttribute('z');
+                                        return { type, value: {x, y, z, w} };
+                        }
+                }
+
+                const initializeUniforms = () => {
+                        uniforms = [...document.getElementsByTagName('uniform')].reduce((result, el) => {
+                                const key = el.getAttribute('name');
+                                result[key] = parseUniform(el);
+                                return result;
+                        }, DEFAULT_UNIFORMS);
+                }
+
+                const assignUniforms = (uniforms, uniformLocations, gl, program, time = 0) => {
+                        Object.keys(uniforms).forEach((name) => {
+                                const uniform = uniforms[name];
+                                switch (uniform.type) {
+                                        case 'FLOAT_1':
+                                                if (name === 'uTime') uniform.value = time;
+                                                gl.uniform1f(uniformLocations[name], uniform.value);
+                                                break;
+                                        case 'INT_1':
+                                                gl.uniform1i(uniformLocations[name], uniform.value);
+                                                break;
+                                        case 'VEC_2':
+                                                gl.uniform2fv(uniformLocations[name], Object.values(uniform.value));
+                                                break;
+                                        case 'VEC_3':
+                                                gl.uniform3fv(uniformLocations[name], Object.values(uniform.value));
+                                                break;
+                                        case 'VEC_4':
+                                                gl.uniform4fv(uniformLocations[name], Object.values(uniform.value));
+                                                break;
+                                        default:
+                                                break;
+                                }
+                        });
+                };
+
+                const render = (gl, program, time) => {
+                        assignUniforms(uniforms, uniformLocations, gl, program, time);
+                        gl.activeTexture(gl.TEXTURE0);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+                }
+
+
+                const loop = (time) => {
+                        render(gl, program, time);
+                        requestAnimationFrame(loop);
+                }
+
+                initializeUniforms();
+                const {gl, program} = initializeGL();
+                loop();
+        })();
+        </script>
+</svg>
